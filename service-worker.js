@@ -1,7 +1,7 @@
 // This file runs in the background, separately from your webpage.
 // Its only job: save copies of your app's files so they load with zero signal.
 
-const CACHE_NAME = "gym-tracker-v1";
+const CACHE_NAME = "gym-tracker-v3";
 
 const FILES_TO_CACHE = [
   "/",
@@ -9,18 +9,29 @@ const FILES_TO_CACHE = [
   "/style.css",
   "/app.js",
   "/config.js",
-  "/manifest.json"
+  "/manifest.json",
+  "/vendor/supabase.js",
+  "/vendor/chart.min.js"
 ];
 
-// When the service worker first installs, save all the app files.
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(FILES_TO_CACHE))
   );
+  self.skipWaiting();
 });
 
-// Every time the app asks for a file, check the cache first.
-// If it's not there (or you're offline), fall back to the network.
+// Clear out old cache versions so updates actually take effect
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) =>
+        Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
+      )
+      .then(() => self.clients.claim())
+  );
+});
+
 self.addEventListener("fetch", (event) => {
   event.respondWith(
     caches.match(event.request).then((cached) => {
