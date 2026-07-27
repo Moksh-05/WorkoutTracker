@@ -4,17 +4,35 @@
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-let exercises = [];              // cached exercise library
-let currentUnit = "lbs";         // lbs or kg, toggled by the button
-let todaysSets = [];             // sets logged in this session, shown in the table
+let exercises = [];
+let todaysSets = [];
 const LBS_TO_KG = 0.453592;
 
-const todayDate = () => new Date().toISOString().split("T")[0]; // "2026-07-26"
+const todayDate = () => new Date().toISOString().split("T")[0];
+
+function lbsToKg(lbs) {
+  if (lbs == null || isNaN(lbs)) return 0;
+  return +(lbs * LBS_TO_KG).toFixed(1);
+}
+
+// Used anywhere a weight needs to display as both units at once, e.g. "150 lbs · 68.0 kg"
+function formatBothUnits(lbs) {
+  if (lbs == null) return "-";
+  return `${lbs} lbs (${lbsToKg(lbs)} kg)`;
+}
+
+function updateWeightConversion() {
+  const lbs = parseFloat(document.getElementById("weight-input").value) || 0;
+  document.getElementById("weight-kg-hint").textContent = `= ${lbsToKg(lbs)} kg`;
+}
+
+function updateBodyWeightConversion() {
+  const lbs = parseFloat(document.getElementById("bodyweight-input").value) || 0;
+  document.getElementById("bodyweight-kg-hint").textContent = `= ${lbsToKg(lbs)} kg`;
+}
 
 // ============================================
 // OFFLINE QUEUE (localStorage)
-// If a save fails because there's no signal, it goes here instead.
-// When the app comes back online, everything queued gets pushed to Supabase.
 // ============================================
 
 function queueOffline(table, row) {
@@ -31,11 +49,11 @@ async function syncOfflineQueue() {
   const remaining = [];
   for (const item of queue) {
     const { error } = await sb.from(item.table).insert(item.row);
-    if (error) remaining.push(item); // keep it queued if it still fails
+    if (error) remaining.push(item);
   }
   localStorage.setItem("offline_queue", JSON.stringify(remaining));
 
-  if (remaining.length === 0) {
+  if (remaining.length === 0 && queue.length > 0) {
     setStatus("All offline data synced.");
   }
 }
@@ -56,10 +74,16 @@ function showTab(name) {
   document.getElementById("dashboard-screen").style.display = name === "dashboard" ? "block" : "none";
   document.getElementById("bodyweight-screen").style.display = name === "bodyweight" ? "block" : "none";
 
+  ["tab-log", "tab-dashboard", "tab-bodyweight"].forEach(id => {
+    document.getElementById(id).classList.remove("active");
+  });
+  document.getElementById("tab-" + name).classList.add("active");
+
   if (name === "dashboard") {
+    renderCalendar();
+    renderConsistencyStats();
     renderStrengthChart();
     renderVolumeChart();
-    renderConsistencyStats();
   }
   if (name === "bodyweight") {
     renderBodyWeightChart();
@@ -67,34 +91,20 @@ function showTab(name) {
 }
 
 // ============================================
-// UNIT TOGGLE (lbs <-> kg display only, storage always stays in lbs)
-// ============================================
-
-function toggleUnit() {
-  currentUnit = currentUnit === "lbs" ? "kg" : "lbs";
-  document.getElementById("other-unit").textContent = currentUnit === "lbs" ? "kg" : "lbs";
-  document.querySelectorAll(".unit-label").forEach(el => el.textContent = currentUnit);
-}
-
-function toDisplayWeight(lbsValue) {
-  if (lbsValue == null) return null;
-  return currentUnit === "lbs" ? lbsValue : +(lbsValue * LBS_TO_KG).toFixed(1);
-}
-
-// ============================================
 // LOAD EXERCISE LIBRARY
-// Tries Supabase first, falls back to whatever was cached last time (for offline).
 // ============================================
 
 async function loadExercises() {
-  const { data, error } = await sb.from("exercises").select("*");
+  try {
+    const { data, error } = await sb.from("exercises").select("*");
+    if (error || !data) throw error || new Error("No data");
 
-  if (error || !data) {
-    exercises = JSON.parse(localStorage.getItem("exercises_cache") || "[]");
-    setStatus("Offline: using cached exercise list.");
-  } else {
     exercises = data;
     localStorage.setItem("exercises_cache", JSON.stringify(data));
+  } catch (err) {
+    // Covers both a clean Supabase error AND a hard network failure (true offline)
+    exercises = JSON.parse(localStorage.getItem("exercises_cache") || "[]");
+    setStatus("Offline: using cached exercise list.");
   }
 
   populateExerciseDropdowns();
@@ -129,8 +139,6 @@ function onExerciseChange() {
 
 // ============================================
 // TARGET CALCULATION
-// Averages your last 3 logged sets for this exercise, adjusts based on how
-// the most recent one felt. This is plain if/else logic, not AI.
 // ============================================
 
 async function showTarget(exercise) {
@@ -162,13 +170,12 @@ async function showTarget(exercise) {
   } else if (exercise.subtype === "reps") {
     display.textContent = `Target: ~${avgReps} reps`;
   } else {
-    display.textContent = `Target: ~${avgWeight + weightAdjust} lbs x ${avgReps} reps`;
+    display.textContent = `Target: ${formatBothUnits(avgWeight + weightAdjust)} x ${avgReps} reps`;
   }
 }
 
 // ============================================
 // WORKOUT DAY HELPERS
-// Every log action needs a workout_days row to attach to first.
 // ============================================
 
 async function getOrCreateWorkoutDay(isRestDay = false) {
@@ -184,7 +191,6 @@ async function getOrCreateWorkoutDay(isRestDay = false) {
     .single();
 
   if (error) {
-    // offline: fake a local id so the rest of the flow still works
     return { id: "local-" + date, date, is_rest_day: isRestDay };
   }
   return data;
@@ -233,7 +239,9 @@ function renderTodaysSets() {
   const body = document.getElementById("todays-sets-body");
   body.innerHTML = "";
   todaysSets.forEach(s => {
-    const weightOrDuration = s.duration_seconds ? `${s.duration_seconds}s` : `${toDisplayWeight(s.weight_lbs) ?? "-"} ${currentUnit}`;
+    const weightOrDuration = s.duration_seconds
+      ? `${s.duration_seconds}s`
+      : formatBothUnits(s.weight_lbs);
     body.innerHTML += `<tr><td>${s.exercise_name}</td><td>${weightOrDuration}</td><td>${s.reps ?? "-"}</td><td>${s.difficulty}</td></tr>`;
   });
 }
@@ -263,8 +271,58 @@ async function renderBodyWeightChart() {
 
   drawChart("bodyweight-chart", {
     labels: data.map(d => d.date),
-    values: data.map(d => toDisplayWeight(d.weight_lbs))
-  }, `Body Weight (${currentUnit})`);
+    values: data.map(d => d.weight_lbs)
+  }, "Body Weight (lbs)");
+}
+
+// ============================================
+// CALENDAR HEATMAP (this month)
+// ============================================
+
+async function renderCalendar() {
+  const { data } = await sb.from("workout_days").select("*");
+  const dayMap = {};
+  (data || []).forEach(d => dayMap[d.date] = d.is_rest_day);
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstWeekday = new Date(year, month, 1).getDay();
+
+  const container = document.getElementById("calendar-container");
+  container.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.className = "calendar-grid";
+
+  // Empty filler cells so day 1 lands on the correct weekday column
+  for (let i = 0; i < firstWeekday; i++) {
+    const filler = document.createElement("div");
+    filler.className = "calendar-day future";
+    grid.appendChild(filler);
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const cell = document.createElement("div");
+    cell.className = "calendar-day";
+    cell.title = dateStr;
+
+    const cellDate = new Date(year, month, day);
+    const isFuture = cellDate > now;
+
+    if (isFuture) {
+      cell.classList.add("future");
+    } else if (dateStr in dayMap) {
+      cell.classList.add(dayMap[dateStr] ? "rest" : "workout");
+    } else {
+      cell.classList.add("missed");
+    }
+
+    grid.appendChild(cell);
+  }
+
+  container.appendChild(grid);
 }
 
 // ============================================
@@ -285,7 +343,7 @@ async function renderStrengthChart() {
 
   drawChart("strength-chart", {
     labels: data.map(d => new Date(d.created_at).toLocaleDateString()),
-    values: data.map(d => toDisplayWeight(d.weight_lbs) ?? d.duration_seconds ?? d.reps)
+    values: data.map(d => d.weight_lbs ?? d.duration_seconds ?? d.reps)
   }, "Progress");
 }
 
@@ -293,7 +351,6 @@ async function renderVolumeChart() {
   const { data } = await sb.from("logged_sets").select("*").order("created_at", { ascending: true });
   if (!data) return;
 
-  // Group by day, sum weight x reps for each day
   const volumeByDay = {};
   data.forEach(s => {
     if (!s.weight_lbs || !s.reps) return;
@@ -303,13 +360,18 @@ async function renderVolumeChart() {
 
   drawChart("volume-chart", {
     labels: Object.keys(volumeByDay),
-    values: Object.values(volumeByDay).map(v => toDisplayWeight(v))
-  }, `Volume (${currentUnit})`);
+    values: Object.values(volumeByDay)
+  }, "Volume (lbs)");
 }
 
 async function renderConsistencyStats() {
   const { data } = await sb.from("workout_days").select("*").order("date", { ascending: true });
-  if (!data || data.length === 0) return;
+  const box = document.getElementById("consistency-stats");
+
+  if (!data || data.length === 0) {
+    box.innerHTML = "<p>No data yet.</p>";
+    return;
+  }
 
   const workoutDays = data.filter(d => !d.is_rest_day).length;
   const restDays = data.filter(d => d.is_rest_day).length;
@@ -317,39 +379,37 @@ async function renderConsistencyStats() {
   const firstDate = new Date(data[0].date);
   const lastDate = new Date();
   const totalDaysInRange = Math.round((lastDate - firstDate) / (1000 * 60 * 60 * 24)) + 1;
-  const missedDays = totalDaysInRange - data.length;
+  const missedDays = Math.max(0, totalDaysInRange - data.length);
 
-  document.getElementById("consistency-stats").innerHTML = `
-    <p>Workout days: ${workoutDays}</p>
-    <p>Rest days: ${restDays}</p>
-    <p>Missed days: ${missedDays < 0 ? 0 : missedDays}</p>
+  box.innerHTML = `
+    <div class="stat-box"><div class="stat-number">${workoutDays}</div><div class="stat-label">Workouts</div></div>
+    <div class="stat-box"><div class="stat-number">${restDays}</div><div class="stat-label">Rest days</div></div>
+    <div class="stat-box"><div class="stat-number">${missedDays}</div><div class="stat-label">Missed</div></div>
   `;
 }
 
 // ============================================
-// SIMPLE CHART HELPER
-// Wraps Chart.js so we're not repeating the same setup code everywhere.
+// CHART HELPER
 // ============================================
 
 const chartInstances = {};
 
 function drawChart(canvasId, dataset, label) {
   const ctx = document.getElementById(canvasId).getContext("2d");
-
   if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
 
   chartInstances[canvasId] = new Chart(ctx, {
     type: "line",
     data: {
       labels: dataset.labels,
-      datasets: [{ label, data: dataset.values, borderColor: "#4ade80", tension: 0.2 }]
+      datasets: [{ label, data: dataset.values, borderColor: "#e5484d", backgroundColor: "rgba(229,72,77,0.1)", fill: true, tension: 0.3 }]
     },
     options: {
       scales: {
-        x: { ticks: { color: "#ffffff" } },
-        y: { ticks: { color: "#ffffff" } }
+        x: { ticks: { color: "#8b8d92" }, grid: { color: "#2a2d32" } },
+        y: { ticks: { color: "#8b8d92" }, grid: { color: "#2a2d32" } }
       },
-      plugins: { legend: { labels: { color: "#ffffff" } } }
+      plugins: { legend: { labels: { color: "#f5f4f0" } } }
     }
   });
 }
@@ -361,6 +421,7 @@ function drawChart(canvasId, dataset, label) {
 window.addEventListener("load", () => {
   loadExercises();
   syncOfflineQueue();
+  document.getElementById("tab-log").classList.add("active");
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("service-worker.js");
