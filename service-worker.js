@@ -1,7 +1,7 @@
-// This file runs in the background, separately from your webpage.
+/ This file runs in the background, separately from your webpage.
 // Its only job: save copies of your app's files so they load with zero signal.
 
-const CACHE_NAME = "gym-tracker-v5";
+const CACHE_NAME = "gym-tracker-v6";
 
 const FILES_TO_CACHE = [
   "/",
