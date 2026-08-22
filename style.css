@@ -1,0 +1,108 @@
+
+/* Small button row (Force update / Admin) */
+.small-btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.small-btn-row .small-btn {
+  flex: 1;
+}
+
+/* Routine chips */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.chip {
+  padding: 6px 12px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  width: auto;
+  margin-top: 0;
+}
+
+select[multiple] {
+  min-height: 140px;
+}
+
+/* Set block builder */
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.set-num {
+  width: 18px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.set-value-input {
+  width: 60px;
+  flex: 1;
+  margin-top: 0;
+  padding: 9px 8px;
+  text-align: center;
+}
+
+.set-weight-input {
+  width: 60px;
+  flex: 1;
+  margin-top: 0;
+  padding: 9px 8px;
+  text-align: center;
+}
+
+.set-weight-btn {
+  flex-shrink: 0;
+  width: auto;
+  margin-top: 0;
+  padding: 9px 10px;
+  font-size: 0.7rem;
+  background: #16181b;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.set-flag-btn {
+  flex-shrink: 0;
+  width: 32px;
+  margin-top: 0;
+  padding: 9px 0;
+  background: #16181b;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.set-flag-btn.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.set-remove-btn {
+  flex-shrink: 0;
+  width: 32px;
+  margin-top: 0;
+  padding: 9px 0;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
