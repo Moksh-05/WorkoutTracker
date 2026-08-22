@@ -6,4 +6,4 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 // PIN for the Admin panel. Change this to your own number before deploying.
 // This is a soft deterrent, not real security, see the note in chat.
-const ADMIN_PIN = "1234";
+const ADMIN_PIN = "0501";
